@@ -2,6 +2,10 @@
 
 Download url with multiple connection
 
+# Requirement
+
+pip install requests
+
 # How to use
 ```
 from multicon.downloader.multicon import MultiCon
