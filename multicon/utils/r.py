@@ -19,21 +19,12 @@ import uuid
 import threading
 from urllib.parse import urljoin
 try:
-    from Crypto.Cipher import AES
-    from Crypto.Util.Padding import unpad
-except: 
-    AES= unpad=None
-isRequests=os.environ.get("requests", "1")=="1"
-if isRequests:
-    # s=timelib.time()
     import requests
     # from requests.models import HTTPError
     requests.urllib3.disable_warnings(requests.urllib3.exceptions.InsecureRequestWarning)
-# else:
-#     from urllib import request, error
-# print(timelib.time()-s, file=sys.stderr)
-# print(sys.path, file=sys.stderr)
-
+except:
+    requests=None
+    
 win = os.name == "nt"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36"
 sslctx = ssl.create_default_context() 
@@ -41,38 +32,7 @@ sslctx.check_hostname = False
 sslctx.verify_mode = ssl.CERT_NONE
 
 clear = lambda: os.system('cls')
-def import_libs(name):
-    try:
-        return __import__(name, globals(), locals()) 
-    except:
-        return None
-def decrypt(data, key, iv=None):
-    if isinstance(key, str):
-        key = key.encode("ascii")
-    if not iv:
-        iv=data[0: 16]
-        data = data[16: ]
-    cipher = AES.new(key, AES.MODE_CBC, iv=iv) 
-    original_data = unpad(cipher.decrypt(data), AES.block_size)
-    return original_data
-def decrypt_file(file, key, output, iv=None):
-    if isinstance(key, str):
-        key = key.encode("ascii")
-    chunk_size=24*1024
-    if isinstance(file, str):
-        rp=open(file, 'rb')
-    else: rp=file
-    try:
-        if not iv: iv = rp.read(16)
-        cipher = AES.new(key, AES.MODE_CBC, iv=iv)
-        with open(output, "wb") as f:
-            while (chunk:= rp.read(chunk_size))!=b"":
-                f.write(cipher.decrypt(chunk))
-    except Exception as e:
-        rp.close()
-        raise e
-    rp.close()
-    return True
+
 def removedir(path):
     shutil.rmtree(path, ignore_errors=True)
 def copy(path, to, mkd=True):
@@ -427,7 +387,7 @@ def onRes(con):
     con.status_code=con.getcode()
     return con
 def getConnection(url, data=None, timeout=30, headers=None, files=None, params=None):
-    if isRequests: 
+    if requests:
         headers = initHeader(headers)
         if data or files:
             # data = postData(data)
@@ -451,7 +411,7 @@ def getConnection(url, data=None, timeout=30, headers=None, files=None, params=N
         except error.HTTPError as e:
             return e
 def req(url, data=None, timeout=30, headers=None, files=None, params=None, stream=False, method=None):
-    if isRequests: return req2(url, params=params, data=data, timeout=timeout, headers=headers, files=files, stream=stream, method=method)
+    if requests: return req2(url, params=params, data=data, timeout=timeout, headers=headers, files=files, stream=stream, method=method)
     headers = initHeader(headers)
     if params: url = newurl(url, params)
     if files:
@@ -490,16 +450,11 @@ def get(url, params=None, timeout=30, headers=None, data=None):
     except Exception as e:
         return None
 def upload(url, file=None, data=None, headers=None, params=None):
-    if isRequests: return upload2(url, file=file, data=data, headers=headers, params=params)
+    if requests: return upload2(url, file=file, data=data, headers=headers, params=params)
     return upload1(url, file=file, data=data, headers=headers, params=params)
 def upload1(url, file=None, data=None, headers=None, params=None):
-    # try:
     res = uploadRequest(url, file=file, data=data, headers=headers, params=params)
     return res.text
-    # except Exception as e: 
-    #     print(e)
-    #     pass
-    # return None
 def uploadRequest(url, file=None, data=None, headers=None, params=None):
     headers = initHeader(headers)
     if data==None: data={}
@@ -526,7 +481,7 @@ def uploadRequest(url, file=None, data=None, headers=None, params=None):
 def uploadReq(url, file=None, headers=None, params=None, method="POST"):
     if isinstance(file, str):
         file=open(file, "rb")
-    if isRequests: return req2(url, data=file, headers=headers, params=params)
+    if requests: return req2(url, data=file, headers=headers, params=params)
     headers = initHeader(headers)
     if params: url=newurl(url, params)
     con = request.Request(url, file, headers=headers, method=method)
@@ -733,7 +688,10 @@ def getFilename(headers, url=None):
         return None
 def mimeToExt(mime, media=False):
     if mime==None: return None
-    ext=mimetypes.guess_extension(mime)
+    if "html" in mime: 
+        ext = ".html"
+    else:
+        ext=mimetypes.guess_extension(mime)
     if media:
         exclude=[
             ".html", ".htm"
@@ -1204,8 +1162,3 @@ def headers_decode(text):
             data[item[0: index].strip()]=item[index+1: ].strip()
         else: data[item]=None
     return data
-
-# print(timelib.time()-s)
-# if __name__=="__main__":
-#     print(sys.path)
-#     sleep(100000)
