@@ -135,7 +135,7 @@ def urlGuessExt(url):
     return None
 def defaultExt(url, defExt="html"):
     data = {
-        'mp4': ("tiktok")
+        'mp4': ["tiktok"]
     }
     list = key = item = None
     for key in data:
