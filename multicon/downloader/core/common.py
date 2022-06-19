@@ -1,9 +1,9 @@
 import os
 import time
 from .util import (USER_AGENT, makefile, makedir, castext, splitname,
-                   getConnection, initHeader
+                   getConnection, initHeader, err
                    )
-from ...utils.r import (formatPath, parseFilename, isDirectURL, getSize, getFilename, uri_decode, cookie_encode)
+from ...utils.r import (formatPath, parseFilename, isDirectURL, getSize, getFilename, uri_decode, cookie_encode, formatFilename)
 TMPNAME =".temp"
 
 class Res:
@@ -71,6 +71,29 @@ class DownloadItem:
         self.range=[]
         self.resumable =False
         self.hash={}
+        self.proxy=None
+        self.auth = None
+        self.thread=False
+        self._interval = 0.5
+        self._max = 0
+        self.originname = None
+        self.autoext=False
+    @property
+    def max(self):
+        return self._max
+    @max.setter
+    def max(self, val):
+        try:
+            self._max = int(val)
+        except:pass
+    @property
+    def interval(self):
+        return self._interval
+    @interval.setter
+    def interval(self, val):
+        try:
+            self._interval = int(val)
+        except:pass
     def getHeaders(self):
         h = self.headers
         if self.referer:
@@ -171,27 +194,28 @@ def check(url, dir, name=None, item=None, overwrite=False, headers=None, lock=No
     os.makedirs(dir, 777, True)
     if name:
         filename = name
-        dot = filename.rfind(".")
-        if(dot >= 0):
-            ext = filename[dot+1:]
-            if(ext == ""):
-                ext = None
-            name = filename[0: dot]
-        else:
-            name = filename
+        if not item.autoext:
+            dot = filename.rfind(".")
+            if(dot >= 0):
+                ext = filename[dot+1:]
+                if(ext == ""):
+                    ext = None
+                name = filename[0: dot]
+            else:
+                name = filename
     if((item == None or not item.nocheck) and (not name or ext == None or not item == None)):
         if not headers:
             headers = item.getHeaders()
             headers = initHeader(headers)
-        req = getConnection(url, headers=headers)
+        req = getConnection(url, headers=headers, proxy=item.proxy, auth=item.auth)
         headers = req.headers
         if(headers != None):
             isDirect= isDirectURL(headers)
             type = headers['Content-Type'] if 'Content-Type' in headers else None
-            if "torrent" in type:
+            if type and "torrent" in type:
                 item.torrent = True
                 return None, None
-            if not name or ext == None:
+            if not name or ext == None or item.autoext:
                 newName = getFilename(headers)
                 if(newName != None):
                     n, e = splitname(newName)
@@ -199,6 +223,9 @@ def check(url, dir, name=None, item=None, overwrite=False, headers=None, lock=No
                         name = n
                     if(ext == None and e):
                         ext = e
+                    # if item.autoext and e and e!=ext:
+                    #     name +="."+ext
+                    #     ext = e
                 if not name or ext == None:
                     if item and item.link:
                         name, ext = parseName(item.link, name, ext)
@@ -227,9 +254,15 @@ def check(url, dir, name=None, item=None, overwrite=False, headers=None, lock=No
         name, ext = parseName(url, name, ext)
     if ext:
         ext = castext(ext)
+    if item.autoext and name and ext and name.endswith("."+ext):
+        name = name[0: -len(ext)-1]
+    if name:
+        name = formatFilename(name).strip()
     if item:
         item.name = (name if name else "") + \
             ("" if (ext == None or ext == "") else "."+ext)
+        if item.isDirect:
+            item.originname = item.name
     if not name:
         if(item != None):
             name = item.title
@@ -237,16 +270,15 @@ def check(url, dir, name=None, item=None, overwrite=False, headers=None, lock=No
         name = ""
     filename = name+("" if (ext == None or ext == "") else "."+ext)
     path = dir+"/"+filename
-    if overwrite:
-        item.targetPath = path
-    if isDirect:
+    # if overwrite:
+    #     item.targetPath = path
+    if isDirect and not overwrite:
         path = makefile(path, lock)
     else: pass
     filename = os.path.basename(path)
     if(not item == None):
-        item.realpath = item.path
+        # item.realpath = item.path
         item.path = path
-        item.name = filename
     return path, filename
 
 def isResumable(headers):
@@ -268,10 +300,20 @@ def initHeaders(headers, item=None):
         j = item.url.rfind("#")
         model = {
             "ref": "referer",
-            "header": "headers"
+            "header": "headers",
+            "p": "proxy",
+            "proxy": "proxy",
+            "a": "auth",
+            "auth": "auth",
+            "s": "max",
+            "i": "interval",
+            "n": "name",
+            "name": "name",
+            "autoext": "autoext",
         }
         if j>=0:
             hash = item.url[j+1: ]
+            item.url = item.url[0: j]
             hash = uri_decode(hash)
             if hash:
                 item.hash = hash
