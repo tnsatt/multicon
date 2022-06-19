@@ -87,8 +87,11 @@ class ChunkItem:
         # if self.end>=0 and self.end!=range[1]: raise RangeException("Wrong End Range "+str(self.end)+" ["+headers.get("Content-Range")+"]")
     def down(self, url, path, headers=None, timeout=0):
         headers = initHeader(headers)
-        con = getConnection(url, headers=headers, timeout=timeout)
-        self.req=con
+        if self.req:
+            con = self.req
+        else:
+            con = getConnection(url, headers=headers, timeout=timeout, proxy=self.parent.proxy, auth = self.parent.auth)
+            self.req=con
         if hasattr(con, "raise_for_status"):
             con.raise_for_status()
         headersize=None
@@ -141,7 +144,7 @@ class ChunkItem:
             return path
         raise Exception("Download Failed")
 class MultiConn:
-    def __init__(self, url, dir, name=None, item=None, headers=None, max=8, chunkSize=4194304, debug=False, tilEnd=True) -> None:
+    def __init__(self, url, dir, name=None, item=None, headers=None, max=8, overwrite=False, chunkSize=4194304, debug=False, tilEnd=True) -> None:
         self.url = url
         self.dir = dir
         self.name = name
@@ -180,6 +183,7 @@ class MultiConn:
         self.threadList={}
         self.resumable = False
         self.isClean=False
+        self.overwrite = overwrite
     def check_next(self, item):
         self.resumable = isResumable(item.res_headers) or getRange(item.res_headers)!=None
         if not self.resumable:
@@ -215,6 +219,9 @@ class MultiConn:
                 break
     def start2(self):
         item = ChunkItem(0, self.size, 0)
+        if self.req: 
+            item.req = self.req
+            self.req=None
         self.list.append(item)
         for i in range(0, self.max):
             item = self.start_new()
@@ -223,6 +230,9 @@ class MultiConn:
     def start1(self):
         '''start new chunk after prev headers'''
         item = ChunkItem(0, self.size, 0)
+        if self.req: 
+            item.req = self.req
+            self.req=None
         self.list.append(item)
         item.beforeread = self.check_next
         self.start_new()
@@ -267,7 +277,7 @@ class MultiConn:
             while not self.end:
                 self.calc()
                 self.progress()
-                time.sleep(0.5)
+                time.sleep(self.item.interval)
             self.calc()
             self.progress(True)
             self.clean()
@@ -461,6 +471,7 @@ class MultiConn:
         item.isTilEnd= self.isTilEnd
         item.thread= self.threadList[index]
         item.headers = copy.copy(self.headers)
+        item.parent = self.item
         try:
             path = item.download(self.url, self.tempDir)
             if item.stop:
@@ -549,7 +560,8 @@ class MultiConn:
         os.makedirs(self.dir, 777, True)
         self.tempDir = makedir(self.dir+"/"+name+"_temp")
     def check(self):
-        p, fn = check(self.url, self.dir, self.name, self.item)
+        p, fn = check(self.url, self.dir, self.name, self.item, overwrite=self.overwrite)
+        self.req = self.item.conn
         self.path = self.item.path
         self.size = self.item.size
         self.resumable= self.item.resumable
