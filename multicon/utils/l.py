@@ -39,195 +39,6 @@ class FileEntry:
         return not self._is_dir
     def stat(self):
         return self._stat
-class Scanfile:
-    def __init__(self, path, exclude=None, pattern=None, to=None, isSub=False) -> None:
-        self.isSub=isSub
-        self.to=to
-        self.path=path
-        self.data=[]
-        self.sub=None
-        self.index=0
-        self.total=0
-        self.parent=None
-        self.readall=False
-        if self.path==None:
-            return
-        if not isSub:
-            if exclude:
-                self.exclude=[]
-                if isinstance(exclude, str):
-                    self.exclude.append(formatPath(exclude).lower())
-                else:
-                    for i in exclude:
-                        self.exclude.append(formatPath(i).lower())
-            else: self.exclude=None
-            if pattern:
-                if isinstance(pattern, str):
-                    self.pattern=[pattern]
-                else:
-                    self.pattern=pattern
-            else: self.pattern=None
-        else: 
-            self.exclude=exclude
-            self.pattern = pattern
-        if isinstance(self.path, str):
-            self.path = formatPath(self.path)
-            if not isExclude(self.path, self.exclude):
-                p = Path(self.path)
-                if p.is_file():
-                    if not self.pattern or isMatch(p.name, self.pattern):
-                        item=FileEntry(self.path)
-                        item.dir=self.to
-                        self.data=[item]
-                else:
-                    l=os.listdir(self.path)
-                    for i in l:
-                        p=self.path+"/"+i
-                        if self.pattern and os.path.isfile(p) and not isMatch(i, self.pattern):
-                            continue
-                        if not isExclude(p, self.exclude):
-                            item=FileEntry(p)
-                            item.dir=self.to
-                            self.data.append(item)
-        elif isinstance(self.path, dict):
-            for i in self.path:
-                item=self.path[i]
-                p=Path(item)
-                if p.exists():
-                    if self.pattern and p.is_file() and not isMatch(p.name, self.pattern):
-                        continue
-                    item = formatPath(item)
-                    if not isExclude(item, self.exclude):
-                        entry=FileEntry(item)
-                        entry.dir=(self.to +"/" if self.to else "")+(i if isinstance(i, str) else "")
-                        self.data.append(entry)
-        else:
-            for item in self.path:
-                p=Path(item)
-                if p.exists():
-                    if self.pattern and p.is_file() and not isMatch(p.name, self.pattern):
-                        continue
-                    item = formatPath(item)
-                    if not isExclude(item, self.exclude):
-                        entry=FileEntry(item)
-                        entry.dir=self.to
-                        self.data.append(entry)
-        self.total=len(self.data)
-    def scanall(self):
-        self.readall=True
-        max=len(self.data)
-        for j in range(max):
-            item=self.data[j]
-            if item.is_dir():
-                item.dir=(item.dir+"/" if item.dir else "")+os.path.basename(item.path)
-                scan=Scanfile(item.path, self.exclude, self.pattern, item.dir, True)
-                scan.scanall()
-                for i in scan.data:
-                    if i.is_file():
-                        self.data.append(i)
-                        self.total=self.total+1
-            else:
-                item.dir=self.to+"/"+item.name if self.to else item.name
-    def next(self):
-        if not self.sub==None:
-            while True:
-                i=self.sub.next()
-                if not i==None:
-                    return i
-                else: 
-                    self.sub=None
-                    self.parent=None
-                    break
-        if self.index>=self.total:
-            return None   
-        index=self.index
-        self.index=self.index+1
-        item = self.data[index]
-        # if isExclude(item.path, self.exclude): 
-        #     return self.next()
-        if item.is_file(): 
-            if not self.readall: 
-                item.dir=(item.dir+"/" if item.dir else "") + item.name
-            #     item.dir=self.to+"/"+item.name if self.to else item.name
-            return item
-        if self.readall:
-            return self.next()
-        if item.dir: item.dir+="/"+os.path.basename(item.path)
-        else: item.dir=os.path.basename(item.path)
-        self.sub=Scanfile(item.path, self.exclude, self.pattern, item.dir, True)
-        self.parent=item.path
-        return self.next()
-    def __next__(self):
-        res = self.next()
-        if res==None: raise StopIteration
-        return res
-    def __iter__(self):
-        return self
-class FileFilter:
-    def __init__(self, path) -> None:
-        self.path=path
-        self.scanfile=Scanfile(path)
-
-class Scanpath:
-    def __iter__(self):
-        return self
-    def __init__(self, path, exclude=None, isSub=False) -> None:
-        self.isSub=isSub
-        self.path=path
-        self.data=[]
-        self.sub=None
-        self.index=0
-        self.total=0
-        if self.path==None:
-            return
-        if not isSub:
-            if exclude:
-                self.exclude=[]
-                for i in exclude:
-                    self.exclude.append(formatPath(i).lower())
-            else: self.exclude=None
-        else: self.exclude=exclude
-        if isinstance(self.path, str):
-            if os.path.exists(self.path):
-                self.path = formatPath(self.path)
-                if not isExclude(self.path, self.exclude):
-                    if Path(self.path).is_file():
-                        self.data=[self.path]
-                    else:
-                        l=os.listdir(self.path)
-                        for i in l:
-                            p=self.path+"/"+i
-                            if not isExclude(p, self.exclude):
-                                self.data.append(p)
-        else:
-            for item in self.path:
-                if Path(item).exists() and not isExclude(item, self.exclude):
-                    self.data.append(formatPath(item))
-        self.total=len(self.data)
-    def __next__(self):
-        res = self.next()
-        if res==None: raise StopIteration
-        return res
-    def next(self):
-        if self.sub is not None:
-            while True:
-                i=self.sub.next()
-                if i is not None:
-                    return i
-                else: 
-                    self.sub=None
-                    break
-        if self.index>=self.total:
-            return None   
-        index=self.index
-        self.index += 1
-        item = self.data[index]
-        # if isExclude(item, self.exclude):
-        #     return self.next()
-        if Path(item).is_file(): 
-            return item
-        self.sub=Scanpath(item, self.exclude, True)
-        return self.next()
 
 import sys
 import fileinput
@@ -330,13 +141,13 @@ class Opt:
     
 def walkfile(path, exclude=None, pattern=None, root=None, sep="/", issub=False):
     if not issub:
+        if root: root = formatPath(root, sep)
         if exclude:
             for i in range(0, len(exclude)):
                 exclude[i] = formatPath(exclude[i], sep).lower()
         if pattern:
             if isinstance(pattern, str):
                 pattern = [pattern]
-    count = 0
     if isinstance(path, list):
         for i in range(0, len(path)):
             item = path[i]
@@ -351,10 +162,10 @@ def walkfile(path, exclude=None, pattern=None, root=None, sep="/", issub=False):
         for i in path:
             item = path[i]
             todir = root if not i else (i if not root else root+sep+i)
-            if isinstance(item, str):
-                if not os.path.exists(item): continue
-                if os.path.isdir(item):
-                    todir = (todir+sep if todir else "") + os.path.basename(item)
+            # if isinstance(item, str):
+            #     if not os.path.exists(item): continue
+            #     if os.path.isdir(item):
+            #         todir = (todir+sep if todir else "") + os.path.basename(item)
             yield from walkfile(item, exclude=exclude, pattern=pattern, root=todir, sep=sep, issub=True)
         return
     if not os.path.exists(path): return
@@ -367,18 +178,7 @@ def walkfile(path, exclude=None, pattern=None, root=None, sep="/", issub=False):
         file.dir = (root+sep if root else "") + file.name
         yield file
     else:
-        lists = os.listdir(path)
-        for name in lists:
-            p= path +sep+name
-            if exclude:
-                if isExclude(p, exclude): continue
-            if os.path.isdir(p):
-                todir = (root+sep if root else "") + name
-                yield from walkdir(p, exclude=exclude, pattern=pattern, root=todir, sep=sep)
-            else:
-                f =FileEntry(p)
-                f.dir = (root+sep if root else "") + f.name
-                yield f
+        yield from walkdir(path, exclude=exclude, pattern=pattern, root=root, sep=sep)
 def walkdir(path, exclude=None, pattern=None, root=None, sep="/"):
     lists = os.listdir(path)
     if len(lists)==0: return 0
@@ -394,3 +194,54 @@ def walkdir(path, exclude=None, pattern=None, root=None, sep="/"):
             f =FileEntry(p)
             f.dir = (root+sep if root else "") + f.name
             yield f
+            
+def scanfile(path, exclude=None, pattern=None, root=None, sep="/", issub=False):
+    if not issub:
+        if exclude:
+            for i in range(0, len(exclude)):
+                exclude[i] = formatPath(exclude[i], sep).lower()
+        if pattern:
+            if isinstance(pattern, str):
+                pattern = [pattern]
+    if isinstance(path, list):
+        for i in range(0, len(path)):
+            item = path[i]
+            todir= root
+            if isinstance(item, str):
+                if not os.path.exists(item): continue
+                if os.path.isdir(item):
+                    todir = (todir+sep if todir else "") + os.path.basename(item)
+            yield from scanfile(item, exclude=exclude, pattern=pattern, root=todir, sep=sep, issub=True)
+        return
+    if isinstance(path, dict):
+        for i in path:
+            item = path[i]
+            todir = root if not i else (i if not root else root+sep+i)
+            # if isinstance(item, str):
+            #     if not os.path.exists(item): continue
+            #     if os.path.isdir(item):
+            #         todir = (todir+sep if todir else "") + os.path.basename(item)
+            yield from scanfile(item, exclude=exclude, pattern=pattern, root=todir, sep=sep, issub=True)
+        return
+    if not os.path.exists(path): return
+    path = formatPath(path, sep)
+    if exclude:
+        if isExclude(path, exclude): return
+    if os.path.isfile(path):
+        if pattern and not isMatch(os.path.basename(path), pattern): return
+        yield path
+    else:
+        yield from scandir(path, exclude=exclude, pattern=pattern, root=root, sep=sep)
+def scandir(path, exclude=None, pattern=None, root=None, sep="/"):
+    lists = os.listdir(path)
+    if len(lists)==0: return 0
+    for name in lists:
+        p = path+sep+name
+        if exclude:
+            if isExclude(p, exclude): continue
+        if os.path.isdir(p):
+            todir = (root+sep if root else "") + name
+            yield from scandir(p, exclude=exclude, pattern=pattern, root=todir, sep=sep)
+        else:
+            if pattern and not isMatch(name, pattern): continue
+            yield p
