@@ -386,15 +386,16 @@ def onRes(con):
             pass
     con.status_code=con.getcode()
     return con
-def getConnection(url, data=None, timeout=30, headers=None, files=None, params=None):
+def getConnection(url, data=None, timeout=30, headers=None, files=None, params=None, proxy=None, auth=None):
+    proxy = getProxy(proxy, auth) if proxy else None
     if requests:
         headers = initHeader(headers)
         if data or files:
             # data = postData(data)
             return requests.post(url, data=data, headers=headers, stream=True, 
-            timeout=timeout, params=params, files=files, verify=False)
+            timeout=timeout, params=params, files=files, verify=False, proxies=proxy)
         else:
-            return requests.get(url, headers=headers, stream=True, timeout=timeout, params=params, verify=False)
+            return requests.get(url, headers=headers, stream=True, timeout=timeout, params=params, verify=False, proxies=proxy)
     else:
         headers = initHeader(headers)
         if params: url = newurl(url, params)
@@ -1162,3 +1163,23 @@ def headers_decode(text):
             data[item[0: index].strip()]=item[index+1: ].strip()
         else: data[item]=None
     return data
+def getProxy(proxy, auth = None, proto="http"):
+    if not proxy: return None
+    if isinstance(proxy, list):
+        proxy = str(proxy[0])+":"+str(proxy[1])
+    if isinstance(auth, list):
+        auth = str(auth[0])+":"+str(auth[1])
+    p = {}
+    if not re.match("^\w+\:\/\/.+", proxy):
+        proxy=(auth+"@" if auth else "")+proxy
+        p[proto] = proto+"://"+proxy
+        # p['https'] = "https://"+proxy
+        # p['ftp'] = "ftp://"+proxy
+        p['https'] = proto+"://"+proxy
+        p['ftp'] = proto+"://"+proxy
+    else:
+        s = proxy.split("://")
+        if auth:
+            proxy = s[0]+"://"+ auth+"@"+s[1]
+        p[s[0]] = proxy
+    return p
