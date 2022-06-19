@@ -5,13 +5,14 @@ try:
     import requests
 except:
     requests=None
-from ...utils.r import (check_file)
+from ...utils.r import (check_file, getProxy)
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36"
 
 sslctx = ssl.create_default_context() 
 sslctx.check_hostname = False
 sslctx.verify_mode = ssl.CERT_NONE
+
 
 def head(url, data=None, timeout=30, headers=None, params=None):
     try:
@@ -31,10 +32,14 @@ def initHeader(headers):
     default_headers.update(headers)
     headers = default_headers
     return headers
-def getConnection(url, timeout=30, headers=None, params=None):
+def getConnection(url, timeout=30, headers=None, params=None, proxy=None, auth=None):
+    if proxy:
+        proxy = getProxy(proxy, auth)
+    else:
+        proxy=None
     if requests: 
         headers = initHeader(headers)
-        return requests.get(url, headers=headers, stream=True, timeout=timeout, params=params, verify=False)
+        return requests.get(url, headers=headers, stream=True, timeout=timeout, params=params, verify=False, proxies=proxy)
     else:
         headers = initHeader(headers)
         con = request.Request(url, headers=headers)
@@ -52,7 +57,7 @@ def splitname(path):
     return name, ""
 def castext(ext):
     castarr = {
-        "mp4": ["m3u", "m3u8"],
+        "mp4": ["m3u", "m3u8", "x-mpegurl"],
         "ts": ["mp2t"]
     }
     lower = ext.lower()
