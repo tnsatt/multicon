@@ -262,15 +262,19 @@ class MultiConn:
             self.waitthread = pthread.pthread(self.wait, ())
             self.waitthread.start()
             self.waitthread.join()
+            if self.error:
+                raise self.error
             self.calc()
             self.progress(True)
             self.clean()
-            if self.error:
-                raise self.error
+            return self.path
         except Exception as e:
+            self.calc()
+            self.progress(True)
+            self.clean()
             self.deb(e)
             raise e
-        return self.path
+        
     def wait(self):
         try:
             if not self.item.parentTask: print("\n\n\n", file=sys.stderr, end="")
