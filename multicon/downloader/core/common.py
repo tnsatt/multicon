@@ -1,9 +1,11 @@
 import os
 import time
+import base64, re
 from .util import (USER_AGENT, makefile, makedir, castext, splitname,
                    getConnection, initHeader, err
                    )
-from ...utils.r import (formatPath, parseFilename, isDirectURL, getSize, getFilename, uri_decode, cookie_encode, formatFilename)
+from ...utils.r import (headers_decode, formatPath, parseFilename, isDirectURL, getSize, getFilename, uri_decode, 
+                        cookie_encode, formatFilename)
 TMPNAME =".temp"
 
 class Res:
@@ -48,7 +50,7 @@ class DownloadItem:
         self.timestart = 0
         self.time = 0
         self.timeend = 0
-        self.stop = False
+        self.is_stop = False
         self.retry = 0
         self.newPath = None
         self.parent = None
@@ -78,6 +80,13 @@ class DownloadItem:
         self._max = 0
         self.originname = None
         self.autoext=False
+        self.max = 0
+    def stop(self):
+        self.is_stop=True
+        try:
+            if self.thread:
+                self.thread.stop()
+        except:pass
     @property
     def max(self):
         return self._max
@@ -212,9 +221,13 @@ def check(url, dir, name=None, item=None, overwrite=False, headers=None, lock=No
         if(headers != None):
             isDirect= isDirectURL(headers)
             type = headers['Content-Type'] if 'Content-Type' in headers else None
-            if type and "torrent" in type:
-                item.torrent = True
-                return None, None
+            if type:
+                if "torrent" in type:
+                    item.torrent = True
+                    return None, None
+                elif "m3u8" in type:
+                    isDirect=True
+                    item.m3u8 = True
             if not name or ext == None or item.autoext:
                 newName = getFilename(headers)
                 if(newName != None):
@@ -300,7 +313,9 @@ def initHeaders(headers, item=None):
         j = item.url.rfind("#")
         model = {
             "ref": "referer",
+            "h": "headers",
             "header": "headers",
+            "headers": "headers",
             "p": "proxy",
             "proxy": "proxy",
             "a": "auth",
@@ -323,6 +338,45 @@ def initHeaders(headers, item=None):
         if(not item.referer == None):
             headers["referer"] = item.referer
         if(not item.headers == None):
+            if isinstance(item.headers, str):
+                item.headers = headers_decode(item.headers)
             for k in item.headers:
                 headers[k] = item.headers[k]
+        if item.cookie:
+            headers["cookie"] = item.cookie if isinstance(item.cookie, str) else cookie_encode(item.cookie)
     return headers
+
+class LockTempDir():
+    def __init__(self, path) -> None:
+        path = re.sub("[\\\/]+", "/", path).strip()
+        assert os.path.exists(path)
+        self.path = path
+        self.file=None
+        self.fp = None
+        self.dir_fd=None
+        self.lock=None
+    def getRoot(self):
+        if os.name=="nt":
+            return "C:/"
+        else:
+            return "/"
+    def __enter__(self):
+        # self.dir_fd = os.open(self.path, os.O_RDONLY)
+        try:
+            dir =  self.getRoot()+"lock"
+            os.makedirs(dir, 777, True)
+            self.file = dir+"/"+base64.b64encode(self.path.encode("ascii")).decode("ascii")
+            if os.path.exists(self.file):
+                os.unlink(self.file)
+            self.fp = open(self.file, "wb")
+        except Exception as e:
+            raise Exception('Somebody else is locking %r - quitting.' % self.path)
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.lock:
+            self.lock.release()
+        if self.fp:
+            self.fp.close()
+        if self.file and os.path.exists(self.file):
+            os.unlink(self.file)
+        if self.dir_fd: os.close(self.dir_fd)
