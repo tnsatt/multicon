@@ -9,7 +9,6 @@ import re
 import random
 import subprocess
 import shutil
-from pprint import pprint as pp
 import mimetypes
 from .req import MultiPartForm
 from urllib import parse, error, request
@@ -42,7 +41,7 @@ def copy(path, to, mkd=True):
     shutil.copy(path, to)
 def firstFileExists(arr):
     for item in arr:
-        if os.path.exists(item):
+        if item and os.path.exists(item):
             return item
     return None
 def arg(key, val=None):
@@ -765,6 +764,11 @@ def readstd(proc, buffer, output=None):
                 output.extend(res)
     except Exception as e:
         print(e)
+def exec_background(cmd, encoding="utf-8"):
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, encoding=encoding)
+    except:
+        pass
 def exec(cmd, debug=False, stdout=None, stderr=None, encoding="utf-8"):
     try: #using pipe and wait => hangs
         if debug:
@@ -851,10 +855,10 @@ def matches(regex, str):
 def isURL(url):
     if not url: return False
     return re.match("^https?\\:\\/\\/.+", url)
-def download(url, dir=None, name=None, headers=None, autorename=False, timeout=300):
+def download(url, dir=None, name=None, headers=None, autorename=False, timeout=300, checkSize=True):
     headers = initHeader(headers)
     con = getConnection(url, headers=headers, timeout=timeout)
-    return downloadReq(con, url=url, dir=dir, name=name, autorename=autorename)
+    return downloadReq(con, url=url, dir=dir, name=name, autorename=autorename, checkSize=checkSize)
 def downloadReq(con, url=None, dir=None, name=None, autorename=False, checkSize=True):
     if hasattr(con, "raise_for_status"):
         con.raise_for_status()
@@ -1183,3 +1187,15 @@ def getProxy(proxy, auth = None, proto="http"):
             proxy = s[0]+"://"+ auth+"@"+s[1]
         p[s[0]] = proxy
     return p
+def pp(data):
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except:pass
+    print(json.dumps(data, indent=4, sort_keys=True, default=str))
+def pe(data):
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except:pass
+    print(json.dumps(data, indent=4, sort_keys=True, default=str), file=sys.stderr)
